@@ -1,0 +1,52 @@
+# Python bytecode files
+*.pyc
+*.pyo
+__pycache__/
+
+# Virtual environment directories
+venv/
+.env/
+*.env
+
+# Dependencies
+pip-wheel-metadata/
+*.egg-info/
+*.dist-info/
+
+# Logs
+*.log
+
+# Test coverage directory (if running tests with coverage)
+.coverage
+.coverage.*
+nosetests.xml
+pytest-debug.log
+pytest*.log
+
+# Django migrations and database files
+db.sqlite3
+*.log
+
+# Caches
+*.cache
+*.pdb
+*.swo
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# IDE and editor-specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build and packaging files
+build/
+dist/
+*.egg
+*.tar.gz
+*.zip
+
+# Supabase-related files (if applicable)
+supabase/
