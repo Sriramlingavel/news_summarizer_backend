@@ -6,3 +6,4 @@ numpy==1.24.3  # Or another stable version
 spacy==3.7.2   # Use a version compatible with your chosen NumPy
 google-generativeai>=0.3.0 
 gunicorn
+uvicorn
