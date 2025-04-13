@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, Body
 import os
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -8,7 +8,7 @@ from agent.summarizer import summarize_article
 from agent.memory_manager import (
     save_user_memory, get_user_memory, get_all_user_interests, 
     get_interests_by_topic, get_yesterday_summary, get_today_summary,
-    save_comparison_result, get_all_topics  # Added get_all_topics here
+    save_comparison_result, get_all_topics
 )
 from agent.tagging import save_user_interests, extract_topics,determine_main_topic
 from agent.personalizer import personalize_summary, analyze_user_interests
@@ -44,13 +44,17 @@ class QueryRequest(BaseModel):
     query: str
     user_id: str
 
+class ArticleRequest(BaseModel):
+    url: str
+    user_id: str
+
 @app.middleware("http")
 async def check_authorization(request: Request, call_next):
     # Define public routes that don't need authentication
     public_paths = ["/", "/docs", "/redoc", "/openapi.json"]
     
     # Skip auth check for public paths or specific endpoints you want to exempt
-    if request.url.path in public_paths or request.url.path.startswith("/summarize/") or request.url.path.startswith("/test_personalization/") or request.url.path.startswith("/compare/"):
+    if request.url.path in public_paths or request.url.path.startswith("/summarize/") or request.url.path.startswith("/test_personalization/") or request.url.path.startswith("/compare/") or request.url.path.startswith("/process_query") or request.url.path.startswith("/summarize_article"):
         return await call_next(request)
     
     # Check for token
@@ -308,6 +312,7 @@ async def debug_table_structure():
             "message": "Failed to query table structure"
         }
 
+# Fixed POST endpoint for processing natural language queries
 @app.post("/process_query")
 async def process_query(request: QueryRequest):
     """
@@ -371,9 +376,8 @@ async def process_query(request: QueryRequest):
     if intent == "compare":
         # Call the compare endpoint
         result = await compare_news(user_id, detected_topic)
-    elif intent == "summarize_article":
-        # This would need an implementation of article fetching
-        # For now, we'll return a placeholder
+    elif intent == "summarize_article" and url:
+        # Create article request with extracted URL
         article_request = ArticleRequest(url=url, user_id=user_id)
         result = await summarize_specific_article(article_request)
     else:
@@ -478,10 +482,7 @@ async def debug_interests_update():
 async def favicon():
     return Response(status_code=204)
 
-class ArticleRequest(BaseModel):
-    url: str
-    user_id: str
-
+# Fixed POST endpoint for summarizing a specific article
 @app.post("/summarize_article")
 async def summarize_specific_article(request: ArticleRequest):
     """
