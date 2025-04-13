@@ -5,6 +5,7 @@ services:
     buildCommand: |
       pip install -r requirements.txt
       python -m spacy download en_core_web_sm
+      python -c "import spacy; nlp = spacy.load('en_core_web_sm'); print('✅ spaCy model loaded successfully')"
     startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
     envVars:
       - key: PYTHON_VERSION
