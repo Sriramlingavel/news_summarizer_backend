@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 import os
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -386,3 +386,7 @@ async def debug_interests_update():
             "error": str(e),
             "message": "Failed to update user_interests"
         }
+    
+@app.get('/favicon.ico', include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
