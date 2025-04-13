@@ -3,7 +3,7 @@ requests==2.28.1
 supabase==2.15.0  # Or another version from the list shown in the error
 python-dotenv==0.21.0
 numpy==1.24.3  # Or another stable version
-spacy==3.7.2   # Use a version compatible with your chosen NumPy
+spacy==3.5.0 # Use a version compatible with your chosen NumPy
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.5.0/en_core_web_sm-3.5.0-py3-none-any.whl
 google-generativeai>=0.3.0 
 gunicorn
