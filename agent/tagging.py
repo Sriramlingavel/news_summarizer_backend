@@ -159,3 +159,42 @@ def save_user_interests(user_id: str, topics: list, memory_id: str = None):
     except Exception as e:
         print(f"Error saving user interests: {e}")
         return False
+    
+def determine_main_topic(text):
+    """
+    Attempt to determine the main topic of an article from its summary.
+    
+    Args:
+        text: The article summary text
+        
+    Returns:
+        The detected topic or "general" if none detected
+    """
+    # Define topic keywords
+    topic_keywords = {
+        "politics": ["government", "election", "president", "political", "policy", "congress", "senate", "vote"],
+        "business": ["business", "economy", "market", "stock", "financial", "company", "investment", "trade"],
+        "technology": ["tech", "technology", "digital", "software", "hardware", "ai", "app", "device", "internet"],
+        "science": ["science", "research", "study", "discovery", "scientist"],
+        "health": ["health", "medical", "medicine", "disease", "covid", "pandemic", "doctor", "hospital"],
+        "sports": ["sport", "game", "team", "player", "match", "championship", "tournament"],
+        "entertainment": ["movie", "film", "music", "celebrity", "star", "actor", "actress", "show", "entertainment"],
+        "climate": ["climate", "environment", "warming", "carbon", "emission", "pollution", "sustainable"]
+    }
+    
+    # Count occurrences of keywords for each topic
+    text_lower = text.lower()
+    topic_scores = {}
+    
+    for topic, keywords in topic_keywords.items():
+        score = sum(text_lower.count(keyword) for keyword in keywords)
+        topic_scores[topic] = score
+    
+    # Find the topic with the highest score
+    if topic_scores:
+        max_topic = max(topic_scores.items(), key=lambda x: x[1])
+        if max_topic[1] > 0:  # If at least one keyword was found
+            return max_topic[0]
+    
+    # Default topic if none detected with confidence
+    return "general"

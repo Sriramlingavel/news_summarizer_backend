@@ -3,18 +3,20 @@ import os
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from datetime import datetime
-from agent.news_fetcher import fetch_news
+from agent.news_fetcher import fetch_news,fetch_article_content
 from agent.summarizer import summarize_article
 from agent.memory_manager import (
     save_user_memory, get_user_memory, get_all_user_interests, 
     get_interests_by_topic, get_yesterday_summary, get_today_summary,
     save_comparison_result, get_all_topics  # Added get_all_topics here
 )
-from agent.tagging import save_user_interests, extract_topics
+from agent.tagging import save_user_interests, extract_topics,determine_main_topic
 from agent.personalizer import personalize_summary, analyze_user_interests
 from agent.summary_comparer import compare_summaries, extract_key_changes
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import re
+from pydantic import BaseModel
 from typing import List, Optional
 
 # Initialize FastAPI app
@@ -36,6 +38,11 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Add this new model for natural language queries
+class QueryRequest(BaseModel):
+    query: str
+    user_id: str
 
 @app.middleware("http")
 async def check_authorization(request: Request, call_next):
@@ -301,6 +308,86 @@ async def debug_table_structure():
             "message": "Failed to query table structure"
         }
 
+@app.post("/process_query")
+async def process_query(request: QueryRequest):
+    """
+    Process a natural language query from the user.
+    
+    Args:
+        request: Contains the query text and user ID
+    
+    Returns:
+        Processed information based on the query intent and topic
+    """
+    query = request.query.lower()
+    user_id = request.user_id
+    
+    # Pattern matching to identify intent and topic
+    compare_pattern = re.compile(r"compare|difference|changes|how.+today.+yesterday|how.+yesterday.+today")
+    
+    topic_patterns = {
+        "politics": re.compile(r"politics|political|government|election"),
+        "business": re.compile(r"business|economic|finance|market|stock"),
+        "technology": re.compile(r"tech|technology|digital|software|hardware|ai|artificial intelligence"),
+        "climate": re.compile(r"climate|environment|global warming|sustainability"),
+        "sports": re.compile(r"sport|sports|game|match|team|player"),
+        "health": re.compile(r"health|medical|medicine|disease|covid|pandemic"),
+        "entertainment": re.compile(r"entertainment|movie|film|music|celebrity"),
+        # Add more topics as needed
+    }
+    
+    # Check for article URL pattern
+    url_pattern = re.compile(r"(https?://\S+)|summarize\s+this\s+article|summary\s+of\s+this\s+article")
+    url_match = url_pattern.search(query)
+    
+    # Determine the intent
+    if url_match:
+        intent = "summarize_article"
+        # Extract URL if present
+        url = next((word for word in query.split() if word.startswith("http")), None)
+        if not url:
+            return {
+                "status": "error",
+                "message": "Please provide a valid article URL to summarize"
+            }
+    elif compare_pattern.search(query):
+        intent = "compare"
+    else:
+        intent = "summarize"
+    
+    # Determine the topic (skip if it's an article URL)
+    detected_topic = None
+    if intent != "summarize_article":
+        for topic, pattern in topic_patterns.items():
+            if pattern.search(query):
+                detected_topic = topic
+                break
+    
+        # Default topic if none detected
+        if not detected_topic:
+            detected_topic = "general"
+    
+    # Route to the appropriate endpoint based on intent
+    if intent == "compare":
+        # Call the compare endpoint
+        result = await compare_news(user_id, detected_topic)
+    elif intent == "summarize_article":
+        # This would need an implementation of article fetching
+        # For now, we'll return a placeholder
+        article_request = ArticleRequest(url=url, user_id=user_id)
+        result = await summarize_specific_article(article_request)
+    else:
+        # Call the summarize endpoint
+        result = await summarize_news(user_id, detected_topic)
+    
+    # Add the original query and detected intent/topic for reference
+    result["query"] = query
+    result["detected_intent"] = intent
+    if intent != "summarize_article":
+        result["detected_topic"] = detected_topic
+    
+    return result
+
 @app.get("/debug/test-direct-insert")
 async def debug_direct_insert():
     """Try a direct insert into the user_memory table with minimal fields."""
@@ -390,3 +477,65 @@ async def debug_interests_update():
 @app.get('/favicon.ico', include_in_schema=False)
 async def favicon():
     return Response(status_code=204)
+
+class ArticleRequest(BaseModel):
+    url: str
+    user_id: str
+
+@app.post("/summarize_article")
+async def summarize_specific_article(request: ArticleRequest):
+    """
+    Summarize a specific article by URL.
+    
+    Args:
+        request: Contains the article URL and user ID
+    """
+    user_id = request.user_id
+    url = request.url
+    
+    try:
+        # Get user interests for personalization
+        all_user_interests = get_all_user_interests(user_id)
+        
+        # Fetch the article content
+        article_content = fetch_article_content(url)
+        
+        if not article_content or article_content.startswith("Error"):
+            return {
+                "status": "error",
+                "message": "Failed to fetch article content",
+                "error": article_content
+            }
+        
+        # Create a basic summary
+        basic_summary = summarize_article({"content": article_content, "url": url})
+        
+        # Personalize the summary
+        personalized_summary = personalize_summary(basic_summary, all_user_interests)
+        
+        # Extract topics
+        new_topics = extract_topics(basic_summary)
+        
+        # Extract likely topic from the content
+        detected_topic = determine_main_topic(basic_summary)
+        
+        # Save to memory
+        memory_id = save_user_memory(user_id, detected_topic, basic_summary)
+        
+        # Save user interests
+        save_user_interests(user_id, new_topics, memory_id)
+        
+        return {
+            "status": "success",
+            "url": url,
+            "detected_topic": detected_topic,
+            "original_summary": basic_summary,
+            "personalized_summary": personalized_summary,
+            "new_topics": new_topics
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error processing article: {str(e)}",
+            "url": url
+        }
